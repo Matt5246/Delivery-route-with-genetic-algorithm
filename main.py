@@ -1,106 +1,110 @@
 import random
 import numpy as np
-import pygad
-import folium
+import matplotlib.pyplot as plt
 
-# Założenia
-clients = {
-    "K1": (52.237, 21.017),
-    "K2": (52.247, 21.027),
-    "K3": (52.257, 21.037),
-    "K4": (52.267, 21.047),
-    "K5": (52.277, 21.057),
-    "K6": (52.287, 21.067),
-    "K7": (52.297, 21.077),
-    "K8": (52.307, 21.087),
-    "K9": (52.317, 21.097),
-    "K10": (52.327, 21.107),
-}
-
-# Convert clients to numerical indices
-clients_indices = {k: i for i, k in enumerate(clients.keys())}
-clients_coordinates = list(clients.values())
-
-cost_matrix = np.array([
-    [0, 5, 8, 3, 2, 7, 6, 4, 9, 1],
-    [5, 0, 6, 4, 8, 3, 2, 9, 1, 7],
-    [8, 6, 0, 2, 5, 9, 1, 7, 4, 3],
-    [3, 4, 2, 0, 6, 8, 5, 7, 9, 1],
-    [2, 8, 5, 6, 0, 3, 7, 9, 1, 4],
-    [7, 3, 9, 8, 3, 0, 6, 4, 2, 1],
-    [6, 2, 1, 5, 7, 6, 0, 8, 3, 9],
-    [4, 9, 7, 7, 9, 4, 8, 0, 5, 2],
-    [9, 1, 4, 9, 1, 2, 3, 5, 0, 8],
-    [1, 7, 3, 1, 4, 1, 9, 2, 8, 0]
-])
-
-# 1. Zdefiniuj kodowanie (permutacyjne)
-def generate_individual():
-    clients_list = list(clients.keys())
-    random.shuffle(clients_list)
-    return [clients_indices[client] for client in clients_list]
-
-# 2. Inicjalizacja populacji
+# Parametry algorytmu genetycznego
 population_size = 100
-population = [generate_individual() for _ in range(population_size)]
+generations = 30
+mutation_rate = 0.6
+tournament_size = 5
 
-# 3. Ocena funkcji celu
-def fitness_function(solution, solution_index, ga_instance):
+# Dane
+customers = ["K1", "K2", "K3", "K4", "K5", "K6", "K7", "K8", "K9", "K10"]
+locations = np.array([(random.uniform(0, 100), random.uniform(0, 100)) for _ in range(len(customers))])
+cost_matrix = np.array([[round(np.linalg.norm(locations[i] - locations[j]), 2) for j in range(len(customers))] for i in range(len(customers))])
+
+# Wyświetlanie danych w konsoli
+print("Klienci:")
+for i, customer in enumerate(customers):
+    print(f"{customer}: {locations[i]}")
+# macierz kosztów tylko na 1 plocie
+plt.figure(figsize=(12, 6))  # Adjust the figure size
+
+plt.subplot(1, 2, 1)
+plt.imshow(cost_matrix, cmap='hot', interpolation='nearest')
+plt.colorbar()
+plt.xticks(range(len(customers)), customers)
+plt.yticks(range(len(customers)), customers)
+
+# Display numbers in the cost matrix
+for i in range(len(customers)):
+    for j in range(len(customers)):
+        plt.text(j, i, cost_matrix[i][j], ha='center', va='center', color='black')
+
+plt.title('Cost Matrix')
+
+# Tworzenie wykresu punktowego
+plt.subplot(1, 2, 2)
+plt.scatter(locations[:, 0], locations[:, 1], c='red', label='Klienci')
+
+
+def generate_individual():
+    route = random.sample(customers, len(customers))
+    #route.append(route[0])  # Add the starting point to close the loop
+    return route
+
+def evaluate_fitness(individual):
     total_cost = 0
-    for i in range(len(solution) - 1):
-        total_cost += cost_matrix[solution[i], solution[i + 1]]
-    return 1 / total_cost  # Cel: minimalizacja kosztu, więc maksymalizujemy odwrotność kosztu
+    for i in range(len(individual) - 1):
+        total_cost += cost_matrix[customers.index(individual[i])][customers.index(individual[i + 1])]
+    return total_cost
 
-# Przykład użycia pyGAD
-ga_instance = pygad.GA(
-    num_generations=50,
-    num_parents_mating=50,
-    sol_per_pop=population_size,
-    num_genes=len(clients),
-    fitness_func=fitness_function,
-    initial_population=population,
-)
+def tournament_selection(population):
+    tournament = random.sample(population, tournament_size)
+    best_individual = min(tournament, key=evaluate_fitness)
+    return best_individual
 
-ga_instance.run()
+def crossover(parent1, parent2):
+    crossover_point = random.randint(0, len(parent1) - 1)
+    child = parent1[:crossover_point] + [gene for gene in parent2 if gene not in parent1[:crossover_point]]
+    return child
 
-# 4. Operatory genetyczne, 5. Proces ewolucji, 6. Warunki zatrzymania, 7. Prezentacja wyników
-for generation in range(ga_instance.num_generations):
-    # Wybór rodziców
-    parents = ga_instance.select_parents()
-    
-    # Krzyżowanie rodziców
-    crossovered_population = ga_instance.crossover(parents)
+def mutate(individual):
+    mutated_individual = individual.copy()
+    gene1, gene2 = random.sample(range(len(individual)), 2)
+    mutated_individual[gene1], mutated_individual[gene2] = mutated_individual[gene2], mutated_individual[gene1]
+    return mutated_individual
 
-    # Mutacja potomstwa
-    mutated_population = ga_instance.mutation(crossovered_population)
+def plot_route(route, generation, cost):
+    route_locations = [locations[customers.index(customer)] for customer in route]
+    route_coordinates = np.array(route_locations).T
+    plt.plot(route_coordinates[0], route_coordinates[1], marker='o', linestyle='-', color='b')
+    plt.scatter(route_coordinates[0], route_coordinates[1], color='r')
+    #plt.plot([route_coordinates[0][-1], route_coordinates[0][0]], [route_coordinates[1][-1], route_coordinates[1][0]], linestyle='-', color='b')  # Closing the loop
+    for i, customer in enumerate(route):
+        plt.text(route_locations[i][0], route_locations[i][1], customer, fontsize=8, ha='right', va='bottom')
+    plt.title(f'Optymalna Trasa Dostaw - Generacja {generation} - Koszt: {cost}')
+    plt.xlabel('Szerokość geograficzna')
+    plt.ylabel('Długość geograficzna')
+    plt.show()
 
-    # Ocena potomstwa
-    fitness_values = np.array([ga_instance.fitness_func(solution, idx, ga_instance) for idx, solution in enumerate(mutated_population)])
+def genetic_algorithm():
+    population = [generate_individual() for _ in range(population_size)]
 
-    # Zastąpienie starej populacji potomstwem
-    ga_instance.update_population(mutated_population, fitness_values)
+    for generation in range(generations):
+        fitness_scores = [evaluate_fitness(individual) for individual in population]
+        new_population = [tournament_selection(population) for _ in range(population_size)]
 
-    # Wydruk informacji o postępie
-    print("Generation:", generation + 1, "Best Fitness:", ga_instance.best_solution()[1])
+        for i in range(0, population_size, 2):
+            parent1, parent2 = new_population[i], new_population[i + 1]
+            child1 = crossover(parent1, parent2)
+            child2 = crossover(parent2, parent1)
+            new_population[i], new_population[i + 1] = child1, child2
 
-    # 6. Warunki zatrzymania
-    if ga_instance.best_solution()[1] == 1.0:
-        print("Solution found in generation", generation + 1)
-        break
+        for i in range(population_size):
+            if random.random() < mutation_rate:
+                new_population[i] = mutate(new_population[i])
 
-# 7. Prezentacja wyników
-best_solution, best_solution_fitness = ga_instance.best_solution()
-print("Best Solution:", best_solution)
-print("Best Fitness:", best_solution_fitness)
+        population = new_population
 
-# 8. Optymalizacja i eksperymenty
-# ... (Dodaj kod do przeprowadzania eksperymentów)
+        best_solution = min(population, key=evaluate_fitness)
+        best_fitness = evaluate_fitness(best_solution)
+        
+        plot_route(best_solution, generation, best_fitness)
 
-# 9. Dokumentacja
-# ... (Dodaj kod do przygotowania dokumentacji)
+    return best_solution, best_fitness
 
-# 8. Optymalizacja i eksperymenty
-# ... (to jest miejsce na dodanie kodu do przeprowadzania eksperymentów)
-
-# 9. Dokumentacja
-# ... (to jest miejsce na dodanie kodu do przygotowania dokumentacji)
+if __name__ == "__main__":
+    best_route, best_cost = genetic_algorithm()
+    print("Najlepsza trasa:", best_route)
+    print("Koszt najkrotszej trasy:", best_cost)
